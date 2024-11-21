@@ -1,0 +1,435 @@
+---
+title: "SNAP Project"
+author: "Patrick Marino"
+date: "2024-11-15"
+output: html_document
+---
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+
+library(readr)
+library(tidyr)
+library(dplyr)
+library(GGally)
+library(sandwich)
+library(lmtest)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+household<- read.csv("C:\\Users\\pjm11\\Downloads\\CSV data files\\faps_household_puf.csv")
+individ<- read.csv("C:\\Users\\pjm11\\Downloads\\CSV data files\\faps_individual_puf.csv")
+FAFHevent<- read.csv("C:\\Users\\pjm11\\Downloads\\CSV data files\\faps_fafhevent_puf.csv")
+FAHevent<- read.csv("C:\\Users\\pjm11\\Downloads\\CSV data files\\faps_fahevent_puf.csv")
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+
+house_sub<- household %>%
+  select(hhnum, adltfscat, snapnowhh, caraccess, rural)
+
+individ_sub<- individ %>%
+  select(PNUM, HHNUM,HEALTHSTATUS, RACECAT_R, EDUCCAT, EMPLOYMENT, HHWGT, MARITAL)
+
+FAFHevent_sub<- FAFHevent %>%
+  select(hhnum, placedist_d, placedist_s, placedist_w, whogotpnum)
+
+FAHevent_sub<- FAHevent %>%
+  select(hhnum, placedist_d, placedist_s, placedist_w, whogotpnum)
+
+FAFHevent_sub <- FAFHevent_sub %>%
+  mutate(PNUM = whogotpnum) %>%
+  select(-whogotpnum)
+
+FAHevent_sub <- FAHevent_sub %>%
+  mutate(PNUM = whogotpnum) %>%
+  select(-whogotpnum)
+
+
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+Foodaps <- individ_sub %>%
+  left_join(house_sub, by = c("HHNUM" = "hhnum"))
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE, results='hide'}
+Foodaps_final <- Foodaps %>%
+  left_join(FAHevent_sub, by = c("HHNUM" = "hhnum", "PNUM"))
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(placedist_w = ifelse(placedist_w == -996.000, NA, placedist_w)) %>%
+    mutate(placedist_w = ifelse(placedist_w == -997.000, NA, placedist_w)) %>%
+    mutate(placedist_w = ifelse(placedist_w == -998.000, NA, placedist_w))
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(placedist_s = ifelse(placedist_s == -996.000, NA, placedist_s)) %>%
+    mutate(placedist_s = ifelse(placedist_s == -997.000, NA, placedist_s)) %>%
+    mutate(placedist_s = ifelse(placedist_s == -998.000, NA, placedist_s))
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(placedist_d = ifelse(placedist_d == -996.000, NA, placedist_d)) %>%
+    mutate(placedist_d = ifelse(placedist_d == -997.000, NA, placedist_d)) %>%
+    mutate(placedist_d = ifelse(placedist_d == -998.000, NA, placedist_d))
+
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(snapnowhh = ifelse(snapnowhh == -997, NA, snapnowhh)) %>%
+  mutate(snapnowhh = ifelse(snapnowhh == -998, NA, snapnowhh)) %>%
+  mutate(snapnowhh = ifelse(snapnowhh == -996, NA, snapnowhh))
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(caraccess = ifelse(caraccess == -997, NA, caraccess)) %>%
+  mutate(caraccess = ifelse(caraccess  == -998, NA, caraccess)) %>%
+  mutate(caraccess = ifelse(caraccess  == -996, NA, caraccess))
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(HEALTHSTATUS = ifelse(HEALTHSTATUS == "D", NA, HEALTHSTATUS)) %>%
+  mutate(HEALTHSTATUS = ifelse(HEALTHSTATUS  == "R", NA, HEALTHSTATUS))
+
+Foodaps_final$snapnowhh<- as.factor(Foodaps_final$snapnowhh)
+Foodaps_final$adltfscat<- as.factor(Foodaps_final$adltfscat)
+Foodaps_final$caraccess<- as.factor(Foodaps_final$caraccess)
+
+Foodaps_final <- Foodaps_final %>%
+  mutate(HEALTHSTATUS = ifelse(HEALTHSTATUS == 7, NA, HEALTHSTATUS))
+Foodaps_final$HEALTHSTATUS<- as.factor(Foodaps_final$HEALTHSTATUS)
+Foodaps_final$rural <- as.factor(Foodaps_final$rural)
+levels(Foodaps_final$rural)
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+selected_data <- Foodaps_final %>%
+  select(adltfscat, HEALTHSTATUS, snapnowhh, caraccess, placedist_d, placedist_s, placedist_w)
+
+
+ggpairs(selected_data, 
+        title = "Pairs Plot for Selected Vars")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = HEALTHSTATUS)) +
+  geom_bar(color = "skyblue", fill = "skyblue") +
+  ggtitle("                     Distribution of Health Status Among Respondents")
+```
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = adltfscat)) +
+  geom_bar(color = "skyblue", fill = "skyblue") +
+  ggtitle("                     Distribution of Food Security Among Respondents")
+```
+
+
+Summary Stats 
+
+**Rural**
+
+Rural by FS tables 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+FS_RUR_tab<- table(Foodaps_final$adltfscat, Foodaps_final$rural)
+FS_Rur_perc_row <- round(prop.table(FS_RUR_tab, margin = 2) * 100, 2)
+FS_Rur_perc_O <- round(prop.table(FS_RUR_tab) * 100, 2)
+
+FS_Rur_perc_O_df <- as.data.frame.matrix(FS_Rur_perc_O)
+FS_Rur_perc_O_df <- cbind("Category" = rownames(FS_Rur_perc_O_df), FS_Rur_perc_O_df)
+
+FS_Rur_perc_C_df <- as.data.frame.matrix(FS_Rur_perc_row)
+FS_Rur_perc_C_df <- cbind("Category" = rownames(FS_Rur_perc_C_df), FS_Rur_perc_C_df)
+
+FS_Rur_Cont_df <- as.data.frame.matrix(FS_RUR_tab)
+FS_Rur_Cont_df <- cbind("Category" = rownames(FS_Rur_Cont_df), FS_Rur_Cont_df)
+
+knitr::kable(FS_Rur_Cont_df, caption = "FS by Rural Cross", col.names = c("FS", "Urban", "Rural"))
+
+knitr::kable(FS_Rur_perc_C_df, caption = "Column-Wise Proportion Table", col.names = c("FS", "Urban", "Rural"))
+
+knitr::kable(FS_Rur_perc_O_df, caption = "Overall Proportion Table", col.names = c("FS", "Urban", "Rural"))
+```
+
+Rural by HS tables 
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+HS_RUR_tab<- table(Foodaps_final$HEALTHSTATUS, Foodaps_final$rural)
+HS_Rur_perc_row <- round(prop.table(HS_RUR_tab, margin = 2) * 100, 2)
+HS_Rur_perc_O <- round(prop.table(HS_RUR_tab) * 100, 2)
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+HS_Rur_perc_O_df <- as.data.frame.matrix(HS_Rur_perc_O)
+HS_Rur_perc_O_df <- cbind("Category" = rownames(HS_Rur_perc_O_df), HS_Rur_perc_O_df)
+
+HS_Rur_perc_C_df <- as.data.frame.matrix(HS_Rur_perc_row)
+HS_Rur_perc_C_df <- cbind("Category" = rownames(HS_Rur_perc_C_df), HS_Rur_perc_C_df)
+
+HS_Rur_Cont_df <- as.data.frame.matrix(HS_RUR_tab)
+HS_Rur_Cont_df <- cbind("Category" = rownames(HS_Rur_Cont_df), HS_Rur_Cont_df)
+
+knitr::kable(HS_Rur_Cont_df, caption = "HS by Rural Cross", col.names = c("HS", "Urban", "Rural"))
+
+knitr::kable(HS_Rur_perc_C_df, caption = "Column-Wise Proportion Table", col.names = c("HS", "Urban", "Rural"))
+
+knitr::kable(HS_Rur_perc_O_df, caption = "Overall Proportion Table", col.names = c("HS", "Urban", "Rural"))
+```
+
+
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats <- function(data, numeric_var, factor_var) {
+  result <- tapply(data[[numeric_var]], data[[factor_var]], function(x) {
+    mean_val <- mean(x, na.rm = TRUE)  
+    sd_val <- sd(x, na.rm = TRUE)
+    count_val <- length(x) 
+    return(c(mean = mean_val, sd = sd_val, count = count_val))
+  })
+  
+    overall_stats <- c(
+    mean = mean(data[[numeric_var]], na.rm = TRUE),
+    sd = sd(data[[numeric_var]], na.rm = TRUE),
+    count = length(data[[numeric_var]])
+  )
+  
+  result_df <- data.frame(
+                          mean = unlist(lapply(result, "[[", "mean")),
+                          sd = unlist(lapply(result, "[[", "sd")),
+                          count = unlist(lapply(result, "[[", "count")))
+                        
+  
+  overall_row <- data.frame(mean = overall_stats["mean"], sd = overall_stats["sd"], count = overall_stats["count"])
+  row.names(overall_row) <- "Overall"
+  
+ result_df <- rbind(result_df, overall_row)
+  
+  return(result_df)
+}
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps, aes(x = factor(rural))) +
+  geom_bar(fill = "blue", color = "black") +
+  ggtitle("Distribution of Rural") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_x_discrete(labels = c("Urban", "Rural")) +
+  xlab("Rural")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = factor(adltfscat), fill = factor(rural))) +
+  geom_bar(color = "black") +  
+  ggtitle("Food Security by Rural") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Food Security") +
+  scale_x_discrete(labels = c("1", "2", "3", "4")) + 
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"), labels = c("Urban", "Rural")) +
+  facet_wrap(~rural, labeller = as_labeller(c(`0` = "Urban", `1` = "Rural"))) +
+  theme(legend.position = "none")
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+Health_filtered<- Foodaps_final %>% filter(!is.na(HEALTHSTATUS))
+
+ggplot(Health_filtered, aes(x = factor(adltfscat), fill = factor(rural))) +
+  geom_bar(color = "black") +
+  ggtitle("Health Status by Rural") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  xlab("Food Security") +
+  scale_x_discrete(labels = c("1", "2", "3", "4", "5")) +  
+  scale_fill_manual(values = c("0" = "blue", "1" = "red"), labels = c("Urban", "Rural")) + # Assign colors
+  facet_wrap(~rural, labeller = as_labeller(c(`0` = "Urban", `1` = "Rural"))) +
+  theme(legend.position = "none") 
+```
+
+
+
+**Distance**
+
+Health Status acquisition location distance (driving)
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_d", "HEALTHSTATUS")
+
+```
+
+
+
+Health Status acquisition location distance (Walking)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_w", "HEALTHSTATUS")
+```
+
+
+
+Health Status by acquisition location distance (Straight line distance)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_s", "HEALTHSTATUS")
+```
+
+
+Food Security by acquisition location distance (Straight line distance)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_s", "adltfscat")
+```
+
+
+Food Security by acquisition location distance (Driving)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_d", "adltfscat")
+
+```
+
+
+Food Security by acquisition location distance (Walking)
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+summary_stats(Foodaps_final, "placedist_w", "adltfscat")
+
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = placedist_s)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+  xlim(0, 35) +
+  labs(title = "Distribution of acquisition location distance (Straight line distance)",
+       x = "Placedist (Straight Line)",
+       y = "Count") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = placedist_s)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+  xlim(0, 35) +
+  labs(title = "Distribution of acquisition location distance (Straight line distance) by Health Status",
+       x = "Placedist (Straight Line)",
+       y = "Count") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~HEALTHSTATUS)
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = placedist_s)) +
+  geom_histogram(binwidth = 1, color = "black", fill = "blue") +
+  xlim(0, 35) +
+  labs(title = "Distribution of acquisition location distance (Straight line distance) by Food Security",
+       x = "Placedist (Straight Line)",
+       y = "Count") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~adltfscat)
+```
+
+
+Analysis of SNAP households 
+
+Descriptive Stats
+```{r}
+summary(Foodaps_final$snapnowhh)
+```
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+
+ggplot(Foodaps_final, aes(x = snapnowhh)) +
+  geom_bar(fill = "blue", color = "black") +
+  ggtitle("Distribution of SNAP HH, 0 = No one in HH on SNAP, 1 = SNAP HH") +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+SNAP hh, Health Status Crosstab 
+```{r}
+table(Foodaps_final$HEALTHSTATUS, Foodaps_final$snapnowhh)
+```
+
+SNAP HH, Food Security Crosstab
+```{r}
+table(Foodaps_final$adltfscat, Foodaps_final$snapnowhh)
+```
+
+Distribution of SNAP HH by race
+White = 1
+Black = 2
+American Indian or Alaska Native = 3
+Asian or Native Hawaiian or Other Pacific Islander = 4
+Other = 5
+Multiple race = 6
+-998 = Refused
+
+
+```{r, echo=FALSE, warning=FALSE, message=FALSE}
+ggplot(Foodaps_final, aes(x = snapnowhh)) +
+geom_bar(fill = "blue", color = "black", binwidth = 1) +
+  facet_wrap(~RACECAT_R) +
+  ggtitle("SNAP HH by Race")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+  
+  
+```
+
+Distribution of Snap HH by Edu
+</= 10th grade = 1
+11th or 12th grade, no diploma = 2
+HS diploma, GED, or Equivalent = 3
+Some college or associates degree = 4
+Bachelors degree = 5
+Masters or above = 6
+DK = -997
+Ref = -998
+Skip = -996
+
+```{r}
+ggplot(Foodaps_final, aes(x = snapnowhh)) +
+geom_bar(fill = "blue", color = "black", binwidth = 1) +
+  facet_wrap(~EDUCCAT) +
+  ggtitle("SNAP HH by Edu")+
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+
+Preliminary Regression Analysis of straight line distance on Food Security
+
+```{r}
+Foodaps_final$adltfscatN <- as.numeric(Foodaps_final$adltfscat)
+FSlm <- lm(adltfscatN ~ placedist_s+MARITAL+snapnowhh+EMPLOYMENT+EDUCCAT+RACECAT_R+caraccess, data = Foodaps_final, weights = HHWGT)
+```
+
+Make Robust
+
+```{r}
+Robust_FSlm <- vcovHC(FSlm, type = "HC1")
+coeftest(FSlm, vcov. = Robust_FSlm)
+```
+
+
+Preliminary Regression Analysis of straight line distance on health status 
+
+```{r}
+Foodaps_final$HEALTHSTATUS <- as.numeric(Foodaps_final$HEALTHSTATUS)
+HSlm <- lm(HEALTHSTATUS ~ placedist_s+MARITAL+snapnowhh+EMPLOYMENT+EDUCCAT+RACECAT_R+caraccess, data = Foodaps_final, weights = HHWGT)
+```
+
+Robust
+```{r}
+Robust_HSlm <- vcovHC(HSlm, type = "HC1")
+coeftest(HSlm, vcov. = Robust_HSlm)
+```
+
+```{r}
+write.csv(Foodaps_final, "Foodaps_final.csv", row.names = FALSE)
+
+```
+
